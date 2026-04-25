@@ -315,6 +315,18 @@
   @keyframes bag-heavy-2  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 25%{transform:translateX(-54%) rotate(-2deg)} 75%{transform:translateX(-46%) rotate(2deg)} }
   @keyframes bag-heavy-3  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 20%{transform:translateX(-56%) rotate(-3deg)} 80%{transform:translateX(-44%) rotate(3deg)} }
   @keyframes bag-heavy-4  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 20%{transform:translateX(-58%) rotate(-4deg)} 80%{transform:translateX(-42%) rotate(4deg)} }
+
+  /* 이동하는 당근 (4단계+) */
+  @keyframes carrot-drift {
+    0%   { margin-left: -55px; }
+    50%  { margin-left:  55px; }
+    100% { margin-left: -55px; }
+  }
+  .carrot.moving { animation: carrot-float linear infinite, carrot-drift ease-in-out infinite; }
+  .carrot.moving.warning { animation: carrot-float linear infinite, carrot-drift ease-in-out infinite, carrot-warn 0.4s ease-in-out infinite; }
+
+  /* 폭탄 툴팁 */
+  .carrot-tooltip.bomb-tip { border: 2px solid #cc0000; color: #cc0000; background: rgba(20,0,0,0.92); }
 </style>
 </head>
 <body>
@@ -402,9 +414,11 @@
   <h1>토끼의 당근 수확!</h1>
   <p>당근을 클릭해서 배낭에 넣어요!</p>
   <div style="background:white;border-radius:16px;padding:12px 20px;width:100%;max-width:280px;border:2px solid #c8e6a0;font-family:'Gaegu',cursive;font-size:0.9rem;color:#4a3728;line-height:1.8;">
-    🌱 <b>1단계 새싹</b> — 30초 · 목표 8개 · 검은 당근 없음<br>
-    🌿 <b>2단계 성장</b> — 28초 · 목표 15개 · 🖤 검은 당근 등장!<br>
-    🍂 <b>3단계 수확</b> — 25초 · 목표 25개 · 🖤 더 자주 등장!
+    🌱 1단계 새싹 — 30초 · 목표 8개<br>
+    🌿 2단계 성장 — 28초 · 목표 15개 · 🖤 검은 당근 등장<br>
+    🍂 3단계 수확 — 25초 · 목표 25개<br>
+    ❄️ 4단계 폭풍 — 22초 · 목표 35개 · 당근이 움직여요!<br>
+    👑 5단계 전설 — 20초 · 목표 50개 · 💣 폭탄 당근 등장!
   </div>
   <button class="btn" id="start-btn">수확 시작! 🎉</button>
 </div>
@@ -514,6 +528,13 @@ function sfxBagHeavy() {
   playTone({ type:'sine', freq:120, freq2:80, gain:0.28, duration:0.25, attack:0.01 });
 }
 
+// 💣 폭탄 당근 — 폭발음
+function sfxBombCarrot() {
+  playTone({ type:'sawtooth', freq:180, freq2:40,  gain:0.55, duration:0.5,  attack:0.005 });
+  playTone({ type:'square',   freq:120, freq2:30,  gain:0.40, duration:0.6,  attack:0.01,  delay:0.05 });
+  playTone({ type:'sine',     freq:60,  freq2:20,  gain:0.50, duration:0.8,  attack:0.01,  delay:0.1  });
+}
+
 // 🏆 스테이지 클리어 팡파르
 function sfxStageClear() {
   [523, 659, 784, 1047].forEach((f, i) =>
@@ -524,9 +545,11 @@ function sfxStageClear() {
 
 // ── 스테이지 설정 ──────────────────────────────────
 const STAGES = [
-  { name:'🌱 1단계 새싹', time:30, target: 8, spawnMs:1200, maxCarrots: 6, blackChance:0    },
-  { name:'🌿 2단계 성장', time:28, target:15, spawnMs:1000, maxCarrots: 8, blackChance:0.20 },
-  { name:'🍂 3단계 수확', time:25, target:25, spawnMs: 800, maxCarrots:10, blackChance:0.30 },
+  { name:'🌱 1단계 새싹', time:30, target: 8, spawnMs:1200, maxCarrots: 6, blackChance:0,    moving:false, bombChance:0    },
+  { name:'🌿 2단계 성장', time:28, target:15, spawnMs:1000, maxCarrots: 8, blackChance:0.20, moving:false, bombChance:0    },
+  { name:'🍂 3단계 수확', time:25, target:25, spawnMs: 800, maxCarrots:10, blackChance:0.30, moving:false, bombChance:0    },
+  { name:'❄️ 4단계 폭풍', time:22, target:35, spawnMs: 700, maxCarrots:12, blackChance:0.35, moving:true,  bombChance:0    },
+  { name:'👑 5단계 전설', time:20, target:50, spawnMs: 500, maxCarrots:15, blackChance:0.30, moving:true,  bombChance:0.08 },
 ];
 
 // ── 상태 ──────────────────────────────────────────
@@ -600,6 +623,18 @@ function updateBag() {
 
 // ── 당근 SVG 생성 ─────────────────────────────────
 function carrotSVG(type, size) {
+  if (type === 'bomb') {
+    return `<svg width="${size}" height="${size}" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style="pointer-events:none;">
+      <ellipse cx="28" cy="10" rx="5" ry="13" fill="#1a1a1a" transform="rotate(-20 28 10)"/>
+      <ellipse cx="32" cy="8"  rx="5" ry="14" fill="#333"    transform="rotate(5 32 8)"/>
+      <ellipse cx="36" cy="11" rx="4" ry="11" fill="#222"    transform="rotate(22 36 11)"/>
+      <path d="M30 17 Q35 10 38 5" stroke="#ff8800" stroke-width="2.5" fill="none" stroke-linecap="round"/>
+      <circle cx="39" cy="4" r="3" fill="#ffdd00" opacity="0.95"/>
+      <path d="M22 18 Q18 50 30 56 Q42 50 38 18 Z" fill="#1a0505"/>
+      <path d="M26 18 Q24 50 30 56 Q36 50 34 18 Z" fill="#cc0000" opacity="0.3"/>
+      <text x="30" y="43" text-anchor="middle" font-size="17" style="pointer-events:none;">💣</text>
+    </svg>`;
+  }
   const isGold  = type === 'gold';
   const isBlack = type === 'black';
   const body  = isBlack ? '#2a2a2a' : isGold ? '#FFD700' : '#FF7A2F';
@@ -623,26 +658,35 @@ function carrotSVG(type, size) {
 
 // ── 당근 스폰 ──────────────────────────────────────
 function pickType() {
-  const r  = Math.random();
-  const bc = STAGES[currentStage - 1].blackChance;
-  if (r < bc)        return 'black';
-  if (r < bc + 0.25) return 'gold';
+  const r   = Math.random();
+  const cfg = STAGES[currentStage - 1];
+  let cum = 0;
+  if (r < (cum += cfg.bombChance))  return 'bomb';
+  if (r < (cum += cfg.blackChance)) return 'black';
+  if (r < (cum += 0.25))            return 'gold';
   return 'red';
 }
 
 function spawnCarrot() {
   if (!isRunning) return;
-  const type    = pickType();
-  const isGold  = type === 'gold';
-  const isBlack = type === 'black';
+  const type      = pickType();
+  const isGold    = type === 'gold';
+  const isBlack   = type === 'black';
+  const isBomb    = type === 'bomb';
+  const isMoving  = STAGES[currentStage - 1].moving;
 
-  // 검정: 중간 크기, 황금: 작고 빠름, 빨강: 크고 느림
-  const size    = isBlack ? 44 + Math.random() * 10 : isGold ? 36 + Math.random() * 10 : 50 + Math.random() * 20;
-  const floatDur = isBlack ? 0.8 + Math.random() * 0.8 : 1.5 + Math.random() * 2;
+  const size      = isBomb  ? 52 + Math.random() * 10
+                  : isBlack ? 44 + Math.random() * 10
+                  : isGold  ? 36 + Math.random() * 10
+                  : 50 + Math.random() * 20;
+  const floatDur  = isBlack ? 0.8 + Math.random() * 0.8 : 1.5 + Math.random() * 2;
+  const driftDur  = currentStage === 5 ? 0.9 + Math.random() * 0.6 : 1.6 + Math.random() * 1.0;
 
-  // 검정: 4~6초, 황금: 3~4초, 빨강: 6~9초
-  const lifetime = isBlack ? 4000 + Math.random() * 2000 : isGold ? 3000 + Math.random() * 1000 : 6000 + Math.random() * 3000;
-  const warnAt   = isBlack ? 1500 : isGold ? 1200 : 2000;
+  const lifetime  = isBomb  ? 3500 + Math.random() * 1500
+                  : isBlack ? 4000 + Math.random() * 2000
+                  : isGold  ? 3000 + Math.random() * 1000
+                  : 6000 + Math.random() * 3000;
+  const warnAt    = isBomb ? 1200 : isBlack ? 1500 : isGold ? 1200 : 2000;
 
   const gameRect    = gameEl.getBoundingClientRect();
   const rabbitLeft  = window.innerWidth / 2 - 80;
@@ -661,24 +705,26 @@ function spawnCarrot() {
   );
 
   const el = document.createElement('div');
-  el.className = 'carrot';
+  el.className = 'carrot' + (isMoving ? ' moving' : '');
   el.style.cssText = `
     left:${x}px; top:${y}px;
     width:${size}px; height:${size}px;
-    animation-duration:${floatDur}s;
-    animation-delay:${Math.random() * -2}s;
+    animation-duration:${floatDur}s${isMoving ? ', ' + driftDur + 's' : ''};
+    animation-delay:${Math.random() * -2}s${isMoving ? ', ' + (-Math.random() * driftDur).toFixed(2) + 's' : ''};
     filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18))
-            ${isGold ? 'drop-shadow(0 0 10px rgba(255,215,0,0.8))' : ''}
-            ${isBlack ? 'drop-shadow(0 0 12px rgba(255,0,0,0.7))' : ''};
+            ${isGold  ? 'drop-shadow(0 0 10px rgba(255,215,0,0.8))' : ''}
+            ${isBlack ? 'drop-shadow(0 0 12px rgba(255,0,0,0.7))' : ''}
+            ${isBomb  ? 'drop-shadow(0 0 14px rgba(255,60,0,0.9))' : ''};
     position: absolute;
   `;
 
-  const tipClass = isBlack ? 'black-tip' : isGold ? 'gold-tip' : 'red-tip';
-  const tipText  = isBlack
-    ? '💀 검은 당근 — 🥕-4개 🌟-2개 손해!'
-    : isGold
-    ? '✨ 황금 당근 — 배낭 그대로 +2개 ⏱+2초!'
-    : '🥕 빨간 당근 — 배낭이 무거워져 +1개';
+  const tipClass = isBomb  ? 'bomb-tip'
+                 : isBlack ? 'black-tip'
+                 : isGold  ? 'gold-tip' : 'red-tip';
+  const tipText  = isBomb  ? '💣 폭탄! 클릭하면 배낭 절반 날아가요!'
+                 : isBlack ? '🖤 검은 당근 — 🥕-4개 🌟-2개 손해!'
+                 : isGold  ? '✨ 황금 당근 — 배낭 그대로 +2개 ⏱+2초!'
+                 : '🥕 빨간 당근 — 배낭이 무거워져 +1개';
 
   el.innerHTML = carrotSVG(type, size) +
     '<div class="carrot-tooltip ' + tipClass + '">' + tipText + '</div>';
@@ -715,8 +761,19 @@ function pickCarrot(el, cx, cy, type, size) {
 
   const isGold  = type === 'gold';
   const isBlack = type === 'black';
+  const isBomb  = type === 'bomb';
 
-  if (isBlack) {
+  if (isBomb) {
+    sfxBombCarrot();
+    const loss = Math.ceil(totalCount / 2);
+    totalCount = Math.max(0, totalCount - loss);
+    redCount   = Math.max(0, Math.floor(redCount  / 2));
+    goldCount  = Math.max(0, Math.floor(goldCount / 2));
+    showParticles(cx, cy, ['💣','💥','🔥','😱'], '#cc0000');
+    showScorePop(cx, cy, `💣 배낭 절반 손실!`, '#cc0000');
+    rabbitZone.style.animation = 'bag-heavy-4 0.08s ease-in-out infinite';
+    setTimeout(() => updateBag(), 10);
+  } else if (isBlack) {
     sfxBlackCarrot();
     const redLoss  = Math.min(redCount,  4);
     const goldLoss = Math.min(goldCount, 2);
