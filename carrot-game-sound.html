@@ -1,0 +1,825 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🐰 토끼의 당근 수확!</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Jua&display=swap');
+
+  :root {
+    --sky: #e8f4f8;
+    --grass: #7bc67e;
+    --grass-dark: #5aab5e;
+    --soil: #c8956c;
+    --carrot-red: #ff6b35;
+    --carrot-gold: #ffd700;
+    --bag-base: #8B6914;
+    --bag-light: #c49a2a;
+    --text-main: #4a3728;
+    --accent: #ff6b35;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: 'Jua', sans-serif;
+    background: linear-gradient(180deg, #87ceeb 0%, #b0e0f0 40%, #e8f4f8 60%, #c8e6a0 75%, #7bc67e 85%, #5aab5e 100%);
+    height: 100vh; width: 100vw;
+    overflow: hidden;
+    cursor: none;
+    user-select: none;
+  }
+
+  /* 구름 */
+  .cloud {
+    position: fixed;
+    background: white;
+    border-radius: 50px;
+    opacity: 0.85;
+    animation: drift linear infinite;
+  }
+  .cloud::before, .cloud::after {
+    content: '';
+    position: absolute;
+    background: white;
+    border-radius: 50%;
+  }
+  @keyframes drift {
+    from { transform: translateX(-200px); }
+    to   { transform: translateX(calc(100vw + 200px)); }
+  }
+
+  /* 커스텀 커서 */
+  #cursor {
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    font-size: 26px;
+    transform: translate(-50%, -50%);
+    transition: transform 0.05s;
+    filter: drop-shadow(0 2px 3px rgba(0,0,0,0.3));
+  }
+  #cursor.grabbing { transform: translate(-50%,-50%) scale(1.3) rotate(-15deg); }
+
+  /* 헤더 HUD */
+  #hud {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 16px;
+    background: rgba(255,255,255,0.75);
+    backdrop-filter: blur(10px);
+    border-bottom: 3px solid rgba(123,198,126,0.5);
+    gap: 8px;
+  }
+
+  .hud-box {
+    background: white;
+    border: 2.5px solid #c8e6a0;
+    border-radius: 20px;
+    padding: 4px 12px;
+    font-size: 0.75rem;
+    color: #5aab5e;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    white-space: nowrap;
+  }
+  .hud-box .val {
+    font-family: 'Gaegu', cursive;
+    font-size: 1rem;
+    color: #4a3728;
+    font-weight: 700;
+  }
+
+  #timer-wrap {
+    position: fixed;
+    top: 52px; left: 0; right: 0;
+    height: 6px;
+    background: rgba(255,255,255,0.4);
+    z-index: 100;
+  }
+  #timer-bar {
+    height: 100%;
+    background: linear-gradient(90deg, #7bc67e, #ff6b35);
+    transition: width 0.1s linear;
+    border-radius: 0 4px 4px 0;
+  }
+
+  /* 게임 영역 */
+  #game {
+    position: fixed;
+    inset: 58px 0 0 0;
+    z-index: 1;
+  }
+
+  /* 당근 */
+  .carrot {
+    position: absolute;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    cursor: none;
+    animation: carrot-float linear infinite;
+    will-change: transform;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.15));
+    transition: transform 0.1s;
+  }
+  .carrot:hover { transform: scale(1.2); }
+  .carrot .body { line-height: 1; pointer-events: none; }
+  .carrot .leaf { font-size: 0.6em; margin-bottom: -4px; pointer-events: none; }
+
+  /* 툴팁 */
+  .carrot-tooltip {
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(255,255,255,0.95);
+    border-radius: 10px;
+    padding: 4px 10px;
+    font-family: 'Gaegu', cursive;
+    font-size: 0.78rem;
+    white-space: nowrap;
+    pointer-events: none;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    opacity: 0;
+    transition: opacity 0.15s;
+    z-index: 300;
+  }
+  .carrot-tooltip.red-tip  { border: 2px solid #ff6b35; color: #cc4400; }
+  .carrot-tooltip.gold-tip { border: 2px solid #d4a017; color: #8a6200; }
+  .carrot-tooltip.black-tip { border: 2px solid #cc0000; color: #cc0000; background: rgba(30,0,0,0.92); }
+  .carrot:hover .carrot-tooltip { opacity: 1; }
+
+  @keyframes carrot-float {
+    0%   { transform: translateY(0)    rotate(0deg); }
+    25%  { transform: translateY(-10px) rotate(5deg); }
+    50%  { transform: translateY(-5px)  rotate(-3deg); }
+    75%  { transform: translateY(-12px) rotate(4deg); }
+    100% { transform: translateY(0)    rotate(0deg); }
+  }
+
+  /* 당근 경고 & 소멸 */
+  @keyframes carrot-warn {
+    0%,100% { opacity: 1; } 50% { opacity: 0.3; }
+  }
+  .carrot.warning { animation: carrot-float linear infinite, carrot-warn 0.4s ease-in-out infinite; }
+  @keyframes carrot-vanish {
+    0%   { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(0.1) rotate(30deg); }
+  }
+  .carrot.vanishing { animation: carrot-vanish 0.3s ease-in forwards !important; pointer-events: none; }
+
+  /* 토끼 + 배낭 영역 */
+  #rabbit-zone {
+    position: fixed;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  #rabbit-svg {
+    position: relative;
+    transition: all 0.3s ease;
+  }
+
+  #bag-count-badge {
+    position: absolute;
+    top: -10px;
+    right: -10px;
+    background: #ff6b35;
+    color: white;
+    font-family: 'Gaegu', cursive;
+    font-size: 1rem;
+    font-weight: 700;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 2px solid white;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+    z-index: 60;
+    transition: all 0.2s;
+  }
+
+  /* 파티클 */
+  .particle {
+    position: fixed;
+    pointer-events: none;
+    font-size: 22px;
+    animation: particle-fly 0.7s ease-out forwards;
+    z-index: 200;
+  }
+  @keyframes particle-fly {
+    0%   { opacity: 1; transform: translate(0,0) scale(1); }
+    100% { opacity: 0; transform: translate(var(--tx), var(--ty)) scale(0.3); }
+  }
+
+  .score-pop {
+    position: fixed;
+    pointer-events: none;
+    font-family: 'Jua', sans-serif;
+    font-size: 1.2rem;
+    text-shadow: 1px 1px 0 white, -1px -1px 0 white, 1px -1px 0 white, -1px 1px 0 white;
+    animation: score-rise 0.9s ease-out forwards;
+    z-index: 201;
+  }
+  @keyframes score-rise {
+    0%   { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-70px) scale(1.2); }
+  }
+
+  /* 오버레이 */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 500;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(232,244,248,0.93);
+    backdrop-filter: blur(10px);
+    padding: 28px 20px;
+    gap: 10px;
+  }
+  .overlay h1 {
+    font-size: 2.2rem;
+    color: #4a3728;
+    text-shadow: 3px 3px 0 #c8e6a0;
+    animation: bounce-in 0.5s cubic-bezier(0.34,1.56,0.64,1);
+    text-align: center;
+  }
+  .overlay p {
+    font-family: 'Gaegu', cursive;
+    font-size: 1rem;
+    color: #666;
+    text-align: center;
+  }
+  .big-score {
+    font-size: 3rem;
+    color: #ff6b35;
+    text-shadow: 2px 2px 0 #ffd6a0;
+    margin: 6px 0;
+    font-family: 'Gaegu', cursive;
+  }
+  .btn {
+    background: linear-gradient(135deg, #7bc67e, #5aab5e);
+    color: white;
+    border: none;
+    border-radius: 50px;
+    padding: 13px 40px;
+    font-size: 1.2rem;
+    font-family: 'Jua', sans-serif;
+    cursor: pointer;
+    box-shadow: 0 4px 0 #3d7a40, 0 6px 20px rgba(90,171,94,0.35);
+    transition: all 0.1s;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 8px;
+  }
+  .btn:active { transform: translateY(2px); box-shadow: 0 2px 0 #3d7a40; }
+  @keyframes bounce-in { 0%{transform:scale(0.3);opacity:0} 100%{transform:scale(1);opacity:1} }
+
+  /* 결과 미리보기 */
+  .result-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: 'Gaegu', cursive;
+    font-size: 1.1rem;
+    color: #4a3728;
+    background: white;
+    border-radius: 12px;
+    padding: 6px 16px;
+    width: 100%;
+    max-width: 280px;
+    border: 2px solid #c8e6a0;
+  }
+
+  /* 배낭 흔들림 - 무거울수록 더 심하게 */
+  @keyframes bag-heavy-0  { 0%,100%{transform:translateX(-50%) rotate(0deg)} }
+  @keyframes bag-heavy-1  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 25%{transform:translateX(-52%) rotate(-1deg)} 75%{transform:translateX(-48%) rotate(1deg)} }
+  @keyframes bag-heavy-2  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 25%{transform:translateX(-54%) rotate(-2deg)} 75%{transform:translateX(-46%) rotate(2deg)} }
+  @keyframes bag-heavy-3  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 20%{transform:translateX(-56%) rotate(-3deg)} 80%{transform:translateX(-44%) rotate(3deg)} }
+  @keyframes bag-heavy-4  { 0%,100%{transform:translateX(-50%) rotate(0deg)} 20%{transform:translateX(-58%) rotate(-4deg)} 80%{transform:translateX(-42%) rotate(4deg)} }
+</style>
+</head>
+<body>
+
+<div id="cursor">🤚</div>
+
+<!-- 구름 장식 -->
+<div class="cloud" style="width:80px;height:25px;top:5%;animation-duration:25s;animation-delay:-5s;"><div style="position:absolute;width:40px;height:35px;border-radius:50%;background:white;top:-15px;left:15px"></div></div>
+<div class="cloud" style="width:120px;height:30px;top:10%;animation-duration:35s;animation-delay:-12s;"><div style="position:absolute;width:55px;height:45px;border-radius:50%;background:white;top:-20px;left:20px"></div></div>
+<div class="cloud" style="width:70px;height:20px;top:3%;animation-duration:20s;animation-delay:-18s;"><div style="position:absolute;width:35px;height:30px;border-radius:50%;background:white;top:-12px;left:10px"></div></div>
+
+<!-- HUD -->
+<div id="hud">
+  <div class="hud-box" style="border-color:#7bc67e;background:linear-gradient(135deg,#efffef,#fff);color:#3a8a3e;">🌱 <span class="val">1단계 새싹</span></div>
+  <div class="hud-box" style="border-color:#ff6b35;background:linear-gradient(135deg,#fff4ee,#fff);color:#cc4400;">🎯 <span class="val" id="target-display">0/8</span></div>
+  <div class="hud-box">🥕 <span class="val" id="red-count">0</span>개</div>
+  <div class="hud-box">🌟 <span class="val" id="gold-count">0</span>개</div>
+  <div class="hud-box">⏱ <span class="val" id="time-display">30</span>초</div>
+</div>
+<div id="timer-wrap"><div id="timer-bar"></div></div>
+
+<!-- 게임 영역 -->
+<div id="game"></div>
+
+<!-- 토끼 + 배낭 -->
+<div id="rabbit-zone">
+  <div id="rabbit-svg" style="position:relative;">
+    <div id="bag-count-badge">0</div>
+    <!-- 토끼 SVG -->
+    <svg id="rabbit" width="120" height="160" viewBox="0 0 120 160" xmlns="http://www.w3.org/2000/svg">
+      <!-- 귀 -->
+      <ellipse cx="38" cy="40" rx="12" ry="32" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="2"/>
+      <ellipse cx="38" cy="40" rx="7" ry="24" fill="#ffc8c8"/>
+      <ellipse cx="82" cy="40" rx="12" ry="32" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="2"/>
+      <ellipse cx="82" cy="40" rx="7" ry="24" fill="#ffc8c8"/>
+      <!-- 몸 -->
+      <ellipse cx="60" cy="115" rx="38" ry="42" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="2"/>
+      <!-- 얼굴 -->
+      <circle cx="60" cy="80" r="34" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="2"/>
+      <!-- 눈 -->
+      <circle cx="48" cy="76" r="6" fill="white" stroke="#333" stroke-width="1.5"/>
+      <circle cx="72" cy="76" r="6" fill="white" stroke="#333" stroke-width="1.5"/>
+      <circle cx="49" cy="77" r="3.5" fill="#222"/>
+      <circle cx="73" cy="77" r="3.5" fill="#222"/>
+      <circle cx="50" cy="75.5" r="1.2" fill="white"/>
+      <circle cx="74" cy="75.5" r="1.2" fill="white"/>
+      <!-- 코/입 -->
+      <ellipse cx="60" cy="88" rx="5" ry="3.5" fill="#ffaaaa"/>
+      <path d="M 55 91 Q 60 96 65 91" stroke="#e08888" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+      <!-- 수염 -->
+      <line x1="30" y1="88" x2="50" y2="90" stroke="#bbb" stroke-width="1" opacity="0.7"/>
+      <line x1="30" y1="93" x2="50" y2="92" stroke="#bbb" stroke-width="1" opacity="0.7"/>
+      <line x1="70" y1="90" x2="90" y2="88" stroke="#bbb" stroke-width="1" opacity="0.7"/>
+      <line x1="70" y1="92" x2="90" y2="93" stroke="#bbb" stroke-width="1" opacity="0.7"/>
+      <!-- 팔 -->
+      <ellipse cx="22" cy="112" rx="10" ry="16" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="1.5" transform="rotate(-15 22 112)"/>
+      <ellipse cx="98" cy="112" rx="10" ry="16" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="1.5" transform="rotate(15 98 112)"/>
+      <!-- 배낭 (몸 앞에 그려서 토끼가 메고 있는 느낌) -->
+      <g id="bag-group">
+        <rect id="bag-body" x="36" y="100" width="48" height="52" rx="10" fill="#c49a2a" stroke="#8B6914" stroke-width="2.5"/>
+        <rect x="36" y="100" width="48" height="14" rx="8" fill="#d4a832" stroke="#8B6914" stroke-width="2"/>
+        <!-- 배낭 버클 -->
+        <rect x="52" y="104" width="16" height="8" rx="3" fill="#8B6914" stroke="#5a4009" stroke-width="1.5"/>
+        <rect x="55" y="105" width="10" height="6" rx="2" fill="#c49a2a"/>
+        <!-- 배낭 포켓 -->
+        <rect x="43" y="120" width="34" height="22" rx="6" fill="#d4a832" stroke="#8B6914" stroke-width="1.5"/>
+        <!-- 당근 개수 표시 (배낭 위에) -->
+        <text id="bag-text" x="60" y="136" text-anchor="middle" font-family="Jua" font-size="11" fill="#4a3728" opacity="0.8">🥕 0</text>
+        <!-- 배낭 끈 -->
+        <path d="M 40 102 Q 30 95 32 85" stroke="#8B6914" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M 80 102 Q 90 95 88 85" stroke="#8B6914" stroke-width="3" fill="none" stroke-linecap="round"/>
+      </g>
+      <!-- 다리 -->
+      <ellipse cx="46" cy="152" rx="14" ry="10" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="1.5"/>
+      <ellipse cx="74" cy="152" rx="14" ry="10" fill="#f5e6d3" stroke="#e8cdb5" stroke-width="1.5"/>
+    </svg>
+  </div>
+  <!-- 풀밭 -->
+  <div style="width:200px;height:20px;background:linear-gradient(180deg,#7bc67e,#5aab5e);border-radius:50% 50% 0 0;margin-top:-8px;"></div>
+</div>
+
+<!-- 시작 화면 -->
+<div class="overlay" id="start-screen">
+  <div style="font-size:4rem;animation:bounce-in 0.6s cubic-bezier(0.34,1.56,0.64,1);">🐰</div>
+  <h1>토끼의 당근 수확!</h1>
+  <p>당근을 클릭해서 배낭에 넣어요!</p>
+  <div style="background:white;border-radius:16px;padding:12px 20px;width:100%;max-width:280px;border:2px solid #c8e6a0;font-family:'Gaegu',cursive;font-size:0.9rem;color:#4a3728;line-height:1.8;">
+    🌱 <b>1단계 새싹</b> — 30초 안에 당근 8개 모으기!<br>
+    🥕 빨간 당근 +1개 &nbsp;·&nbsp; 🌟 황금 당근 +2개<br>
+    <span style="color:#5aab5e;font-weight:700;">검은 당근 없음! 편하게 시작해요 😊</span>
+  </div>
+  <button class="btn" id="start-btn">수확 시작! 🎉</button>
+</div>
+
+<!-- 종료 화면 -->
+<div class="overlay" id="end-screen" style="display:none;">
+  <div style="font-size:3.5rem;" id="end-emoji">🐰🎒</div>
+  <h1 id="end-title">수확 완료!</h1>
+  <div class="big-score" id="final-count"></div>
+  <div class="result-row">🥕 빨간 당근 <span style="margin-left:auto;font-weight:700;" id="final-red"></span>개</div>
+  <div class="result-row">🌟 황금 당근 <span style="margin-left:auto;font-weight:700;" id="final-gold"></span>개</div>
+  <p id="result-msg" style="font-size:1rem;margin-top:4px;"></p>
+  <button class="btn" id="restart-btn">다시 수확! 🔄</button>
+</div>
+
+<script>
+// ── 🔊 Web Audio API 음향 엔진 ────────────────────
+let audioCtx = null;
+
+function getAudioCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function playTone({ type='sine', freq=440, freq2=null, gain=0.4, duration=0.18, attack=0.01, decay=0.05, delay=0 }) {
+  try {
+    const ctx = getAudioCtx();
+    const t = ctx.currentTime + delay;
+    const osc = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    osc.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    if (freq2) osc.frequency.linearRampToValueAtTime(freq2, t + duration);
+    gainNode.gain.setValueAtTime(0, t);
+    gainNode.gain.linearRampToValueAtTime(gain, t + attack);
+    gainNode.gain.linearRampToValueAtTime(0, t + duration);
+    osc.start(t);
+    osc.stop(t + duration + 0.01);
+  } catch(e) {}
+}
+
+// 🥕 빨간 당근 — 통통한 "pop" + 업 스윕
+function sfxRedCarrot() {
+  playTone({ type:'triangle', freq:300, freq2:520, gain:0.35, duration:0.12, attack:0.005 });
+  playTone({ type:'sine',     freq:520, freq2:680, gain:0.20, duration:0.15, attack:0.01, delay:0.08 });
+}
+
+// 🌟 황금 당근 — 반짝이는 고음 아르페지오
+function sfxGoldCarrot() {
+  [0, 0.06, 0.12, 0.18].forEach((d, i) => {
+    const notes = [660, 880, 1100, 1320];
+    playTone({ type:'sine', freq:notes[i], gain:0.22, duration:0.18, attack:0.005, delay:d });
+  });
+  // 반짝 노이즈
+  playTone({ type:'triangle', freq:1800, freq2:2200, gain:0.12, duration:0.25, attack:0.01, delay:0.05 });
+}
+
+// 💀 검은 당근 — 불길한 하강음 + 충격음
+function sfxBlackCarrot() {
+  playTone({ type:'sawtooth', freq:220, freq2:80,  gain:0.45, duration:0.35, attack:0.01 });
+  playTone({ type:'square',   freq:150, freq2:60,  gain:0.30, duration:0.4,  attack:0.005, delay:0.05 });
+  playTone({ type:'sine',     freq:80,  freq2:40,  gain:0.35, duration:0.5,  attack:0.02, delay:0.1 });
+}
+
+// 🎮 게임 시작 — 경쾌한 팡파르
+function sfxGameStart() {
+  const melody = [
+    {freq:523, d:0},    // C5
+    {freq:659, d:0.1},  // E5
+    {freq:784, d:0.2},  // G5
+    {freq:1047,d:0.32}, // C6
+  ];
+  melody.forEach(n => playTone({ type:'triangle', freq:n.freq, gain:0.28, duration:0.18, attack:0.01, delay:n.d }));
+  playTone({ type:'sine', freq:1047, gain:0.15, duration:0.4, attack:0.005, delay:0.45 });
+}
+
+// 🏁 게임 종료 — 차분한 마무리 멜로디
+function sfxGameEnd() {
+  const melody = [
+    {freq:784, d:0},
+    {freq:659, d:0.15},
+    {freq:523, d:0.3},
+    {freq:392, d:0.48},
+  ];
+  melody.forEach(n => playTone({ type:'sine', freq:n.freq, gain:0.25, duration:0.22, attack:0.01, delay:n.d }));
+}
+
+// ⏱ 타이머 경고 (10초 이하) — 심박수 느낌의 틱
+function sfxTimerTick() {
+  playTone({ type:'square', freq:400, gain:0.18, duration:0.06, attack:0.002 });
+}
+
+// 🎒 배낭 꽉 참 (무거울 때) — 쿵 소리
+function sfxBagHeavy() {
+  playTone({ type:'sine', freq:120, freq2:80, gain:0.28, duration:0.25, attack:0.01 });
+}
+
+// ── 상태 ──────────────────────────────────────────
+let redCount = 0, goldCount = 0, totalCount = 0;
+let timeLeft = 30;
+let gameInterval = null, spawnInterval = null;
+let carrots = [];
+let isRunning = false;
+
+// ── DOM ───────────────────────────────────────────
+const gameEl       = document.getElementById('game');
+const redDisplay   = document.getElementById('red-count');
+const goldDisplay  = document.getElementById('gold-count');
+const targetDisplay = document.getElementById('target-display');
+const timeDisplay  = document.getElementById('time-display');
+const timerBar     = document.getElementById('timer-bar');
+const bagText      = document.getElementById('bag-text');
+const bagBody      = document.getElementById('bag-body');
+const bagBadge     = document.getElementById('bag-count-badge');
+const rabbitZone   = document.getElementById('rabbit-zone');
+const cursor       = document.getElementById('cursor');
+
+// ── 커서 ──────────────────────────────────────────
+document.addEventListener('mousemove', e => {
+  cursor.style.left = e.clientX + 'px';
+  cursor.style.top  = e.clientY + 'px';
+});
+document.addEventListener('mousedown', () => cursor.classList.add('grabbing'));
+document.addEventListener('mouseup',   () => cursor.classList.remove('grabbing'));
+
+// ── 배낭 크기 업데이트 ─────────────────────────────
+const BAG_BASE_W = 48, BAG_BASE_H = 52;
+function updateBag() {
+  // 빨간 당근만 배낭 크기에 영향
+  const growth = Math.min(redCount * 3, 60); // 최대 60px 성장
+  const newW = BAG_BASE_W + growth;
+  const newH = BAG_BASE_H + growth * 0.8;
+  const offsetX = 36 - growth / 2;
+  const offsetY = 100 - growth * 0.6;
+
+  bagBody.setAttribute('x', offsetX);
+  bagBody.setAttribute('y', offsetY);
+  bagBody.setAttribute('width', newW);
+  bagBody.setAttribute('height', newH);
+  bagBody.setAttribute('rx', 10 + growth * 0.1);
+
+  // 배낭 텍스트 위치
+  bagText.setAttribute('x', offsetX + newW / 2);
+  bagText.setAttribute('y', offsetY + newH * 0.72);
+  bagText.textContent = `🥕 ${totalCount}`;
+
+  // 뱃지
+  bagBadge.textContent = totalCount;
+  bagBadge.style.transform = `scale(${1 + Math.min(totalCount * 0.02, 0.5)})`;
+
+  // 흔들림 단계 (빨간 당근 기준)
+  const heavyLevel = Math.min(Math.floor(redCount / 3), 4);
+  rabbitZone.style.animation = '';
+  void rabbitZone.offsetWidth;
+  rabbitZone.style.animation = `bag-heavy-${heavyLevel} ${1.5 - heavyLevel * 0.2}s ease-in-out infinite`;
+
+  // HUD 업데이트
+  redDisplay.textContent      = redCount;
+  goldDisplay.textContent     = goldCount;
+  targetDisplay.textContent   = totalCount + '/8';
+}
+
+// ── 당근 SVG 생성 ─────────────────────────────────
+function carrotSVG(type, size) {
+  const isGold  = type === 'gold';
+  const isBlack = type === 'black';
+  const body  = isBlack ? '#2a2a2a' : isGold ? '#FFD700' : '#FF7A2F';
+  const shade = isBlack ? '#111111' : isGold ? '#C8A000' : '#E05A10';
+  const leaf  = isBlack ? '#1a1a1a' : isGold ? '#A8C800' : '#4CAF50';
+  const leaf2 = isBlack ? '#333333' : isGold ? '#C8E000' : '#66BB6A';
+  return `<svg width="${size}" height="${size}" viewBox="0 0 60 60" xmlns="http://www.w3.org/2000/svg" style="pointer-events:none;">
+    <!-- 잎 -->
+    <ellipse cx="28" cy="10" rx="5" ry="13" fill="${leaf}" transform="rotate(-20 28 10)"/>
+    <ellipse cx="32" cy="8"  rx="5" ry="14" fill="${leaf2}" transform="rotate(5 32 8)"/>
+    <ellipse cx="36" cy="11" rx="4" ry="11" fill="${leaf}" transform="rotate(22 36 11)"/>
+    <!-- 몸통 -->
+    <path d="M22 18 Q18 50 30 56 Q42 50 38 18 Z" fill="${body}"/>
+    <path d="M26 18 Q24 50 30 56 Q36 50 34 18 Z" fill="${shade}" opacity="0.25"/>
+    <!-- 광택 -->
+    <ellipse cx="25" cy="28" rx="3" ry="7" fill="white" opacity="0.18" transform="rotate(-10 25 28)"/>
+    ${isGold ? `<ellipse cx="30" cy="35" rx="8" ry="10" fill="white" opacity="0.08"/>` : ''}
+    ${isBlack ? `<ellipse cx="25" cy="28" rx="2" ry="5" fill="#ff2222" opacity="0.7" transform="rotate(-10 25 28"/><circle cx="32" cy="25" r="3" fill="#ff0000" opacity="0.85"/>` : ''}
+  </svg>`;
+}
+
+// ── 당근 스폰 ──────────────────────────────────────
+// 1단계: 빨강/황금만 (검은 당근 없음)
+let _spawnIndex = 0;
+const _spawnTypes = ['red','gold','red'];
+function spawnCarrot() {
+  if (!isRunning) return;
+  const type   = _spawnTypes[_spawnIndex % 3];
+  _spawnIndex++;
+  const isGold  = type === 'gold';
+  const isBlack = type === 'black';
+
+  // 검정: 중간 크기, 황금: 작고 빠름, 빨강: 크고 느림
+  const size    = isBlack ? 44 + Math.random() * 10 : isGold ? 36 + Math.random() * 10 : 50 + Math.random() * 20;
+  const floatDur = isBlack ? 0.8 + Math.random() * 0.8 : 1.5 + Math.random() * 2;
+
+  // 검정: 4~6초, 황금: 3~4초, 빨강: 6~9초
+  const lifetime = isBlack ? 4000 + Math.random() * 2000 : isGold ? 3000 + Math.random() * 1000 : 6000 + Math.random() * 3000;
+  const warnAt   = isBlack ? 1500 : isGold ? 1200 : 2000;
+
+  const gameRect    = gameEl.getBoundingClientRect();
+  const rabbitLeft  = window.innerWidth / 2 - 80;
+  const rabbitRight = window.innerWidth / 2 + 80;
+  const rabbitTop   = window.innerHeight - 220;
+  const maxY        = Math.max(rabbitTop - gameRect.top - size - 20, 10);
+
+  let x, y, tries = 0;
+  do {
+    x = 20 + Math.random() * Math.max(gameRect.width - size - 40, 10);
+    y = 10 + Math.random() * maxY;
+    tries++;
+  } while (
+    tries < 10 &&
+    (x + size > rabbitLeft && x < rabbitRight && y + gameRect.top > rabbitTop - 60)
+  );
+
+  const el = document.createElement('div');
+  el.className = 'carrot';
+  el.style.cssText = `
+    left:${x}px; top:${y}px;
+    width:${size}px; height:${size}px;
+    animation-duration:${floatDur}s;
+    animation-delay:${Math.random() * -2}s;
+    filter: drop-shadow(0 4px 8px rgba(0,0,0,0.18))
+            ${isGold ? 'drop-shadow(0 0 10px rgba(255,215,0,0.8))' : ''}
+            ${isBlack ? 'drop-shadow(0 0 12px rgba(255,0,0,0.7))' : ''};
+    position: absolute;
+  `;
+
+  const tipClass = isBlack ? 'black-tip' : isGold ? 'gold-tip' : 'red-tip';
+  const tipText  = isBlack
+    ? '💀 검은 당근 — 🥕-4개 🌟-2개 손해!'
+    : isGold
+    ? '✨ 황금 당근 — 배낭 그대로 +2개 ⏱+2초!'
+    : '🥕 빨간 당근 — 배낭이 무거워져 +1개';
+
+  el.innerHTML = carrotSVG(type, size) +
+    '<div class="carrot-tooltip ' + tipClass + '">' + tipText + '</div>';
+  el.dataset.type = type;
+
+  // 자동 소멸 타이머
+  const warnTimer  = setTimeout(() => { if (el.parentNode) el.classList.add('warning'); },   lifetime - warnAt);
+  const vanishTimer = setTimeout(() => {
+    if (!el.parentNode) return;
+    el.classList.remove('warning');
+    el.classList.add('vanishing');
+    const idx = carrots.indexOf(el);
+    if (idx > -1) carrots.splice(idx, 1);
+    setTimeout(() => el.remove(), 300);
+    if (isRunning) setTimeout(spawnCarrot, 200);
+  }, lifetime);
+
+  el.addEventListener('click', e => {
+    if (!isRunning) return;
+    clearTimeout(warnTimer);
+    clearTimeout(vanishTimer);
+    pickCarrot(el, e.clientX, e.clientY, type, size);
+  });
+
+  gameEl.appendChild(el);
+  carrots.push(el);
+}
+
+// ── 당근 수확 ──────────────────────────────────────
+function pickCarrot(el, cx, cy, type, size) {
+  const idx = carrots.indexOf(el);
+  if (idx > -1) carrots.splice(idx, 1);
+  el.remove();
+
+  const isGold  = type === 'gold';
+  const isBlack = type === 'black';
+
+  if (isBlack) {
+    sfxBlackCarrot();
+    const redLoss  = Math.min(redCount,  4);
+    const goldLoss = Math.min(goldCount, 2);
+    redCount   -= redLoss;
+    goldCount  -= goldLoss;
+    totalCount  = redCount + goldCount * 2;
+    showParticles(cx, cy, ['💀','🖤','⚡','😱'], '#cc0000');
+    showScorePop(cx, cy, `🥕-${redLoss} 🌟-${goldLoss} 😱`, '#cc0000');
+    // 배낭 흔들림 쇼크
+    rabbitZone.style.animation = 'bag-heavy-4 0.1s ease-in-out infinite';
+    setTimeout(() => updateBag(), 10);
+  } else if (isGold) {
+    sfxGoldCarrot();
+    goldCount++;
+    totalCount += 2;
+    timeLeft += 2;
+    timeDisplay.textContent = timeLeft;
+    timerBar.style.width = Math.min(timeLeft / 30 * 100, 100) + '%';
+    showParticles(cx, cy, ['✨','💫','⚡','🌟'], '#ffd700');
+    showScorePop(cx, cy, '+2개 ⏱+2초!', '#c8a000');
+  } else {
+    sfxRedCarrot();
+    redCount++;
+    totalCount += 1;
+    showParticles(cx, cy, ['🥕','💚','🌿','✨'], '#ff6b35');
+    showScorePop(cx, cy, '+1개 🥕', '#ff6b35');
+    // 배낭 무거울 때 쿵 소리
+    if (redCount > 0 && redCount % 5 === 0) setTimeout(sfxBagHeavy, 120);
+  }
+
+  updateBag();
+
+  // 배낭 덜컹임 효과
+  const badge = document.getElementById('bag-count-badge');
+  badge.style.transform = 'scale(1.5)';
+  setTimeout(() => { badge.style.transform = ''; }, 200);
+
+  // 300ms 후 새 당근 스폰
+  setTimeout(() => { if (isRunning) spawnCarrot(); }, 250);
+}
+
+// ── 파티클 ────────────────────────────────────────
+function showParticles(cx, cy, icons, color) {
+  for (let i = 0; i < 7; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const angle = (i / 7) * Math.PI * 2;
+    const dist  = 45 + Math.random() * 55;
+    p.style.cssText = `left:${cx}px;top:${cy}px;--tx:${Math.cos(angle)*dist}px;--ty:${Math.sin(angle)*dist}px;color:${color};`;
+    p.textContent = icons[Math.floor(Math.random() * icons.length)];
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), 750);
+  }
+}
+
+function showScorePop(cx, cy, text, color) {
+  const el = document.createElement('div');
+  el.className = 'score-pop';
+  el.style.cssText = `left:${cx}px;top:${cy - 20}px;color:${color};`;
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+
+// ── 게임 시작 ──────────────────────────────────────
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function show(id) { document.getElementById(id).style.display = 'flex'; }
+
+function startGame() {
+  redCount = 0; goldCount = 0; totalCount = 0;
+  timeLeft = 30;
+  isRunning = true;
+  carrots = [];
+  gameEl.innerHTML = '';
+  sfxGameStart();
+
+  // 배낭 리셋
+  bagBody.setAttribute('x', 36);
+  bagBody.setAttribute('y', 100);
+  bagBody.setAttribute('width', BAG_BASE_W);
+  bagBody.setAttribute('height', BAG_BASE_H);
+  rabbitZone.style.animation = '';
+
+  updateBag();
+  hide('start-screen');
+  hide('end-screen');
+
+  timerBar.style.width = '100%';
+
+  // 초기 당근 5개 스폰
+  for (let i = 0; i < 5; i++) setTimeout(spawnCarrot, i * 150);
+
+  // 주기적 스폰
+  spawnInterval = setInterval(() => {
+    if (carrots.length < 10 && isRunning) spawnCarrot();
+  }, 1200);
+
+  // 타이머
+  gameInterval = setInterval(() => {
+    timeLeft--;
+    timeDisplay.textContent = timeLeft;
+    timerBar.style.width = Math.min(timeLeft / 30 * 100, 100) + '%';
+    if (timeLeft <= 10 && timeLeft > 0) sfxTimerTick();
+    if (timeLeft <= 0) endGame();
+  }, 1000);
+}
+
+function endGame() {
+  clearInterval(gameInterval);
+  clearInterval(spawnInterval);
+  isRunning = false;
+  gameEl.innerHTML = '';
+  sfxGameEnd();
+
+  const cleared = totalCount >= 8;
+  document.getElementById('end-emoji').textContent = cleared ? '🌱🎉' : '😢🐰';
+  document.getElementById('end-title').textContent = cleared ? '1단계 클리어!' : '목표 미달성...';
+  document.getElementById('final-count').textContent = cleared
+    ? `총 ${totalCount}개 수확! 🎉`
+    : `총 ${totalCount}개 (목표: 8개)`;
+  document.getElementById('final-red').textContent   = redCount;
+  document.getElementById('final-gold').textContent  = goldCount;
+
+  const msg = cleared
+    ? totalCount < 15 ? '아슬아슬 클리어! 잘했어요 😊'
+      : totalCount < 25 ? '훌륭한 새싹 농부! 🐰'
+      : '당근 전설의 시작! 👑'
+    : `아쉬워요! 😢 ${8 - totalCount}개만 더 모았으면...`;
+  document.getElementById('result-msg').textContent = msg;
+  show('end-screen');
+}
+
+// ── 버튼 이벤트 ───────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
