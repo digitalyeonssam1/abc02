@@ -327,6 +327,30 @@
 
   /* 폭탄 툴팁 */
   .carrot-tooltip.bomb-tip { border: 2px solid #cc0000; color: #cc0000; background: rgba(20,0,0,0.92); }
+
+  /* 단계 선택 버튼 */
+  .stage-btn {
+    background: white;
+    border: 2.5px solid #c8e6a0;
+    border-radius: 14px;
+    padding: 9px 16px;
+    font-family: 'Jua', sans-serif;
+    cursor: pointer;
+    width: 100%;
+    max-width: 300px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: #4a3728;
+    transition: transform 0.12s, border-color 0.12s, background 0.12s;
+  }
+  .stage-btn:hover  { transform: translateX(6px); border-color: #ff6b35; background: #fffaf7; }
+  .stage-btn:active { transform: scale(0.97); }
+  .btn-sub {
+    background: linear-gradient(135deg, #87ceeb, #5588bb);
+    box-shadow: 0 4px 0 #336688, 0 6px 20px rgba(85,136,187,0.3);
+  }
 </style>
 </head>
 <body>
@@ -413,14 +437,27 @@
   <div style="font-size:4rem;animation:bounce-in 0.6s cubic-bezier(0.34,1.56,0.64,1);">🐰</div>
   <h1>토끼의 당근 수확!</h1>
   <p>당근을 클릭해서 배낭에 넣어요!</p>
-  <div style="background:white;border-radius:16px;padding:12px 20px;width:100%;max-width:280px;border:2px solid #c8e6a0;font-family:'Gaegu',cursive;font-size:0.9rem;color:#4a3728;line-height:1.8;">
-    🌱 1단계 새싹 — 30초 · 목표 8개<br>
-    🌿 2단계 성장 — 28초 · 목표 15개 · 🖤 검은 당근 등장<br>
-    🍂 3단계 수확 — 25초 · 목표 25개<br>
-    ❄️ 4단계 폭풍 — 22초 · 목표 35개 · 당근이 움직여요!<br>
-    👑 5단계 전설 — 20초 · 목표 50개 · 💣 폭탄 당근 등장!
-  </div>
-  <button class="btn" id="start-btn">수확 시작! 🎉</button>
+  <p style="font-size:0.85rem;color:#888;font-family:'Gaegu',cursive;">원하는 단계를 선택하세요!</p>
+  <button class="stage-btn" onclick="startGame(1)">
+    <span style="font-size:1.6rem">🌱</span>
+    <div style="flex:1"><div>1단계 새싹</div><div style="font-size:0.75rem;color:#999;font-family:'Gaegu',cursive">30초 · 목표 8개 · 검은 당근 없음</div></div>
+  </button>
+  <button class="stage-btn" onclick="startGame(2)">
+    <span style="font-size:1.6rem">🌿</span>
+    <div style="flex:1"><div>2단계 성장</div><div style="font-size:0.75rem;color:#999;font-family:'Gaegu',cursive">28초 · 목표 15개 · 🖤 검은 당근 20%</div></div>
+  </button>
+  <button class="stage-btn" onclick="startGame(3)">
+    <span style="font-size:1.6rem">🍂</span>
+    <div style="flex:1"><div>3단계 수확</div><div style="font-size:0.75rem;color:#999;font-family:'Gaegu',cursive">25초 · 목표 25개 · 🖤 검은 당근 30%</div></div>
+  </button>
+  <button class="stage-btn" onclick="startGame(4)">
+    <span style="font-size:1.6rem">❄️</span>
+    <div style="flex:1"><div>4단계 폭풍</div><div style="font-size:0.75rem;color:#999;font-family:'Gaegu',cursive">22초 · 목표 35개 · 당근이 움직여요!</div></div>
+  </button>
+  <button class="stage-btn" onclick="startGame(5)">
+    <span style="font-size:1.6rem">👑</span>
+    <div style="flex:1"><div>5단계 전설</div><div style="font-size:0.75rem;color:#999;font-family:'Gaegu',cursive">20초 · 목표 50개 · 💣 폭탄 당근 등장!</div></div>
+  </button>
 </div>
 
 <!-- 스테이지 클리어 화면 -->
@@ -440,7 +477,8 @@
   <div class="result-row">🥕 빨간 당근 <span style="margin-left:auto;font-weight:700;" id="final-red"></span>개</div>
   <div class="result-row">🌟 황금 당근 <span style="margin-left:auto;font-weight:700;" id="final-gold"></span>개</div>
   <p id="result-msg" style="font-size:1rem;margin-top:4px;"></p>
-  <button class="btn" id="restart-btn">다시 수확! 🔄</button>
+  <button class="btn" id="restart-btn">같은 단계 다시! 🔄</button>
+  <button class="btn btn-sub" onclick="goToStageSelect()">다른 단계 선택 🎯</button>
 </div>
 
 <script>
@@ -842,14 +880,27 @@ function showScorePop(cx, cy, text, color) {
 function hide(id) { document.getElementById(id).style.display = 'none'; }
 function show(id) { document.getElementById(id).style.display = 'flex'; }
 
-function startGame() {
+function startGame(stageNum) {
   redCount = 0; goldCount = 0; totalCount = 0;
-  currentStage = 1; stageStartScore = 0;
+  currentStage = stageNum || 1; stageStartScore = 0;
   sfxGameStart();
   hide('start-screen');
   hide('end-screen');
   hide('stage-clear-screen');
   startStage();
+}
+
+function restartStage() {
+  redCount = 0; goldCount = 0; totalCount = 0;
+  stageStartScore = 0;
+  sfxGameStart();
+  hide('end-screen');
+  startStage();
+}
+
+function goToStageSelect() {
+  hide('end-screen');
+  show('start-screen');
 }
 
 function startStage() {
@@ -955,8 +1006,7 @@ function endGame(victory) {
 }
 
 // ── 버튼 이벤트 ───────────────────────────────────
-document.getElementById('start-btn').addEventListener('click', startGame);
-document.getElementById('restart-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', restartStage);
 </script>
 </body>
 </html>
